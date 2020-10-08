@@ -1,0 +1,24 @@
+{
+  "name": "outpost-subscriptions",
+  "version": "0.0.1",
+  "description": "decentralized subscription protocol",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "truffle test"
+  },
+  "keywords": [
+    "truffle",
+    "superfluid",
+    "ethereum",
+    "subscriptions"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@superfluid-finance/ethereum-contracts": "^0.1.0-preview-20200928-fix6",
+    "dotenv": "^8.2.0",
+    "truffle": "^5.1.47"
+  }
+}
