@@ -17,6 +17,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@openzeppelin/contracts": "^3.2.0",
     "@superfluid-finance/ethereum-contracts": "^0.1.0-preview-20200928-fix6",
     "dotenv": "^8.2.0",
     "truffle": "^5.1.47"
