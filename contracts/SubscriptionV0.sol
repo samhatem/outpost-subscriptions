@@ -1,16 +1,19 @@
-pragma solidity 0.6.12;
+pragma solidity 0.7.1;
 
 import {
     ISuperfluid,
     ISuperToken,
+    ISuperAgreement,
     ISuperApp,
     SuperAppDefinitions
 } from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
 
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {
+    IConstantFlowAgreementV1
+} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/EnumerableSet.sol"
+import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 
 contract Subscription is ISuperApp, Ownable {
 
@@ -35,7 +38,7 @@ contract Subscription is ISuperApp, Ownable {
         assert(address(host) != address(0));
         assert(address(cfa) != address(0));
         assert(address(acceptedToken) != address(0));
-        assert(address(rewardToken)) != address(0));
+        assert(address(rewardToken) != address(0));
 
         _host = host;
         _cfa = cfa;
@@ -48,10 +51,28 @@ contract Subscription is ISuperApp, Ownable {
         _host.registerApp(configWord);
     }
 
-
-    // function to deposit the return token
-
     // check balance of return token
+    function rewardBalance (
+    )
+        public view
+        returns (uint256)
+    {
+        return _rewardToken.balanceOf(address(this));
+    }
+
+    function _getFlowInfo(
+        bytes calldata ctx,
+        address agreementClass,
+        bytes32 agreementId
+    )
+        private view
+        returns (address sender, int96 flowRate)
+    {
+        (,,sender,,) = _host.decodeCtx(ctx);
+
+        (,flowRate,,) = IConstantFlowAgreementV1(agreementClass).getFlowByID(_acceptedToken, agreementId);
+        require(flowRate >= _MINIMUM_FLOW_RATE, "SubV0: Flow too low.");
+    }
 
     // SUPER APP CALLBACKS
 
@@ -64,26 +85,42 @@ contract Subscription is ISuperApp, Ownable {
         external view override
         onlyHost
         onlyExpected(superToken, agreementClass)
-        returns (bytes memory cbdata)
+        returns (bytes memory)
     {}
 
     function afterAgreementCreated(
-        ISuperToken superToken,
+        ISuperToken /* superToken */,
         bytes calldata ctx,
         address agreementClass,
         bytes32 agreementId,
-        bytes calldata cbdata
+        bytes calldata /* cbdata */
     )
         external override
         onlyHost
         returns (bytes memory newCtx)
-    {}
+    {
+      // create a stream to the sender
+      (address sender, int96 flowRate) = _getFlowInfo(ctx, agreementClass, agreementId);
+
+      newCtx = ctx;
+
+      _host.callAgreement(
+          _cfa,
+          abi.encodeWithSelector(
+              _cfa.createFlow.selector,
+              _rewardToken,
+              sender,
+              flowRate,
+              newCtx
+          )
+      );
+    }
 
     function beforeAgreementUpdated(
         ISuperToken superToken,
-        bytes calldata ctx,
+        bytes calldata,
         address agreementClass,
-        bytes32 agreementId
+        bytes32 /* agreementId */
     )
         external view override
         onlyHost
@@ -93,28 +130,48 @@ contract Subscription is ISuperApp, Ownable {
 
 
     function afterAgreementUpdated(
-        ISuperToken superToken,
+        ISuperToken /* superToken */,
         bytes calldata ctx,
         address agreementClass,
         bytes32 agreementId,
-        bytes calldata cbdata
+        bytes calldata /* cbdata */
     )
         external override
         onlyHost
         returns (bytes memory newCtx)
-    {}
+    {
+        // update stream to the sender
+        (address sender, int96 flowRate) = _getFlowInfo(ctx, agreementClass, agreementId);
+
+        newCtx = ctx;
+
+        _host.callAgreement(
+            _cfa,
+            abi.encodeWithSelector(
+                _cfa.updateFlow.selector,
+                _rewardToken,
+                sender,
+                flowRate,
+                newCtx
+            )
+        );
+    }
 
 
     function beforeAgreementTerminated(
         ISuperToken superToken,
-        bytes calldata ctx,
+        bytes calldata /* ctx */,
         address agreementClass,
-        bytes32 agreementId
+        bytes32 /* agreementId */
     )
         external view override
         onlyHost
         returns (bytes memory cbdata)
-    {}
+    {
+        // don't revert is termination
+        if (!_isSameToken(superToken) || !_isCFAv1(agreementClass)) return abi.encode(true);
+        return abi.encode(false);
+    }
 
 
     function afterAgreementTerminated(
@@ -127,7 +184,9 @@ contract Subscription is ISuperApp, Ownable {
         external override
         onlyHost
         returns (bytes memory newCtx)
-    {}
+    {
+        // terminate our stream to the sender
+    }
 
     function _isSameToken(ISuperToken superToken) private view returns (bool) {
         return address(superToken) == address(_acceptedToken);
