@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pragma solidity 0.7.1;
 
 import {
@@ -15,7 +16,7 @@ import {
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 
-contract Subscription is ISuperApp, Ownable {
+contract SubscriptionV0 is ISuperApp, Ownable {
 
     /// @dev Minimum flow rate to participate (hardcoded to $5 / mo)
     int96 constant private _MINIMUM_FLOW_RATE = int96(uint256(5e18) / uint256(3600 * 24 * 30));
@@ -110,7 +111,7 @@ contract Subscription is ISuperApp, Ownable {
               _cfa.createFlow.selector,
               _rewardToken,
               sender,
-              flowRate,
+              flowRate / 2,
               newCtx
           )
       );
@@ -151,7 +152,7 @@ contract Subscription is ISuperApp, Ownable {
                 _cfa.updateFlow.selector,
                 _rewardToken,
                 sender,
-                flowRate,
+                flowRate / 2,
                 newCtx
             )
         );
