@@ -3,6 +3,7 @@ const TestToken = artifacts.require('TestToken')
 const { wad4human } = require('@decentral.ee/web3-helpers')
 const SuperfluidSDK = require("@superfluid-finance/ethereum-contracts");
 
+
 const MINIMUM_FLOW_RATE = 1929012345679
 
 let subscription
@@ -12,13 +13,20 @@ let alice
 let sf
 let dai
 
+
 contract('SubscriptionV0', accounts => {
   before(async () => {
-    sf = new SuperfluidSDK.Framework({
-      chainId: 5,
-      version: process.env.SUPERFLUID_VERSION,
-      web3Provider: web3.currentProvider
-    })
+
+    if ((await web3.eth.net.getId()) === 5 /* goerli */) {
+        console.log("Using goerli superfluid");
+        sf = new SuperfluidSDK.Framework({
+          chainId: 5,
+          version: process.env.SUPERFLUID_VERSION,
+          web3Provider: web3.currentProvider
+        })
+    } else {
+        sf = new SuperfluidSDK.Framework({ web3Provider: web3.currentProvider });       
+    }
     await sf.initialize()
 
     const daiAddress = await sf.resolver.get("tokens.fDAI");
