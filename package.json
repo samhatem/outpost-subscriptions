@@ -8,6 +8,7 @@
   "scripts": {
     "build": "truffle compile --all",
     "migrate": "truffle migrate",
+    "pretest": "mkdir -p build/contracts;cp node_modules/@superfluid-finance/ethereum-contracts/build/contracts/* build/contracts/",
     "test": "truffle test",
     "test:goerli": "yarn test --network goerli"
   },

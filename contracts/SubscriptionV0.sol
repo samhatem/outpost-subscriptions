@@ -47,10 +47,7 @@ contract SubscriptionV0 is ISuperApp, Ownable {
         _rewardToken = rewardToken;
 
         uint256 configWord =
-            SuperAppDefinitions.TYPE_APP_FINAL |
-            SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP |
-            SuperAppDefinitions.BEFORE_AGREEMENT_UPDATED_NOOP |
-            SuperAppDefinitions.BEFORE_AGREEMENT_TERMINATED_NOOP;
+            SuperAppDefinitions.TYPE_APP_FINAL;
 
         _host.registerApp(configWord);
     }
