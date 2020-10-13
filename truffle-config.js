@@ -6,24 +6,14 @@ const INFURA_ID = process.env.INFURA_ID
 
 module.exports = {
   networks: {
-    development: {
-      host: "127.0.0.1",
-      port: 7545,
-      network_id: "5777",
-    },
-
     goerli: {
-      provider: () => new HDWalletProvider(MNEMONIC, `https://goerli.infura.io/v3/${INFURA_ID}`),
+      provider: () => new HDWalletProvider(MNEMONIC, `http://localhost:8545`),
       network_id: 5,
       confirmations: 2,
       timeoutBlocks: 200,
-      skipDryRun: true
-    },
-  },
-
-  // Set default mocha options here, use special reporters etc.
-  mocha: {
-    // timeout: 100000
+      skipDryRun: true,
+      gasPrice: 10000000000
+    }
   },
 
   // Configure your compilers

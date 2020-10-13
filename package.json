@@ -8,7 +8,8 @@
   "scripts": {
     "build": "truffle compile --all",
     "migrate": "truffle migrate",
-    "test": "truffle test"
+    "test": "truffle test",
+    "test:goerli": "yarn test --network goerli"
   },
   "keywords": [
     "truffle",
@@ -19,7 +20,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@decentral.ee/web3-helpers": "^0.3.2",
     "@openzeppelin/contracts": "^3.2.1-solc-0.7",
+    "@openzeppelin/test-helpers": "^0.5.6",
     "@superfluid-finance/ethereum-contracts": "^0.1.0-preview-20200928-fix6",
     "@truffle/contract": "^4.2.25",
     "@truffle/hdwallet-provider": "^1.1.0",

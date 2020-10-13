@@ -14,7 +14,7 @@ module.exports = async function (deployer, _, accounts) {
 
   // MIGRATE THE TEST TOKEN
   const tokenName = 'JammSession'
-  const rewardToken = await deployer.deploy(TestToken, tokenName, 'JAMM')
+  const rewardToken = await TestToken.deployed(tokenName, 'JAMM')
 
   console.log(rewardToken.address, 'address of the created token')
 
@@ -43,21 +43,23 @@ module.exports = async function (deployer, _, accounts) {
   const daixWrapper = await sf.getERC20Wrapper(dai);
   const daix = await sf.contracts.ISuperToken.at(daixWrapper.wrapperAddress);
 
+  // GET THE REWARD TOKEN WRAPPER
+
+  superTokenWrapper = await sf.getERC20Wrapper(rewardToken)
+  console.log(superTokenWrapper.wrapperAddress, 'The wrapper address')
+  const tokenx = await sf.contracts.ISuperToken.at(superTokenWrapper.wrapperAddress)
+
   const sub = await deployer.deploy(
     SubscriptionV0,
     sf.host.address,
     sf.agreements.cfa.address,
     daix.address,
-    TestToken.address
+    tokenx.address
   )
 
   console.log(`Contract deployed at ${sub.address}`)
 
   // FUND THE CONTRACT
-
-  superTokenWrapper = await sf.getERC20Wrapper(rewardToken)
-  console.log(superTokenWrapper.wrapperAddress, 'The wrapper address')
-  const tokenx = await sf.contracts.ISuperToken.at(superTokenWrapper.wrapperAddress)
 
   await rewardToken.mint(alice, web3.utils.toWei("2000000", "ether"), { from: alice })
   await rewardToken.approve(tokenx.address, web3.utils.toWei("2000000", "ether"), { from: alice })

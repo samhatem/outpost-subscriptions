@@ -47,17 +47,20 @@ contract SubscriptionV0 is ISuperApp, Ownable {
         _rewardToken = rewardToken;
 
         uint256 configWord =
-            SuperAppDefinitions.TYPE_APP_FINAL;
+            SuperAppDefinitions.TYPE_APP_FINAL |
+            SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP |
+            SuperAppDefinitions.BEFORE_AGREEMENT_UPDATED_NOOP |
+            SuperAppDefinitions.BEFORE_AGREEMENT_TERMINATED_NOOP;
 
         _host.registerApp(configWord);
     }
 
+    function rewardToken () public view returns (address) {
+      return address(_rewardToken);
+    }
+
     // check balance of return token
-    function rewardBalance (
-    )
-        public view
-        returns (uint256)
-    {
+    function rewardBalance () public view returns (uint256) {
         return _rewardToken.balanceOf(address(this));
     }
 
@@ -72,22 +75,24 @@ contract SubscriptionV0 is ISuperApp, Ownable {
         (,,sender,,) = _host.decodeCtx(ctx);
 
         (,flowRate,,) = IConstantFlowAgreementV1(agreementClass).getFlowByID(_acceptedToken, agreementId);
-        require(flowRate >= _MINIMUM_FLOW_RATE, "SubV0: Flow too low.");
     }
 
     // SUPER APP CALLBACKS
 
     function beforeAgreementCreated(
         ISuperToken superToken,
-        bytes calldata ctx,
+        bytes calldata /*ctx*/,
         address agreementClass,
-        bytes32 agreementId
+        bytes32 /* agreementId */
     )
         external view override
         onlyHost
         onlyExpected(superToken, agreementClass)
-        returns (bytes memory)
-    {}
+        returns (bytes memory /* data */)
+    {
+        require(superToken == _acceptedToken, "Unsupported token");
+        require(agreementClass == address(_cfa), "Unsupported agreement");
+    }
 
     function afterAgreementCreated(
         ISuperToken /* superToken */,
@@ -102,35 +107,85 @@ contract SubscriptionV0 is ISuperApp, Ownable {
     {
       // create a stream to the sender
       (address sender, int96 flowRate) = _getFlowInfo(ctx, agreementClass, agreementId);
+      require(flowRate >= _MINIMUM_FLOW_RATE, "SubV0: Flow too low.");
 
       newCtx = ctx;
 
-      _host.callAgreement(
+      (newCtx, ) = _host.callAgreementWithContext(
           _cfa,
           abi.encodeWithSelector(
               _cfa.createFlow.selector,
               _rewardToken,
               sender,
-              flowRate / 2,
-              newCtx
-          )
+              flowRate,
+              new bytes(0)
+          ),
+          newCtx
       );
     }
 
     function beforeAgreementUpdated(
         ISuperToken superToken,
-        bytes calldata,
+        bytes calldata /*ctx*/,
         address agreementClass,
         bytes32 /* agreementId */
     )
         external view override
         onlyHost
         onlyExpected(superToken, agreementClass)
-        returns (bytes memory cbdata)
-    {}
-
+        returns (bytes memory /* data */)
+    {
+        require(superToken == _acceptedToken, "Unsupported token");
+        require(agreementClass == address(_cfa), "Unsupported agreement");
+    }
 
     function afterAgreementUpdated(
+        ISuperToken superToken,
+        bytes calldata ctx,
+        address agreementClass,
+        bytes32 agreementId,
+        bytes calldata /* cbdata */
+    )
+        external override
+        onlyHost
+        returns (bytes memory newCtx)
+    {
+        // create a stream to the sender
+        (address sender, int96 flowRate) = _getFlowInfo(ctx, agreementClass, agreementId);
+        require(flowRate >= _MINIMUM_FLOW_RATE, "SubV0: Flow too low.");
+
+        newCtx = ctx;
+
+        (newCtx, ) = _host.callAgreementWithContext(
+            _cfa,
+            abi.encodeWithSelector(
+                _cfa.updateFlow.selector,
+                _rewardToken,
+                sender,
+                flowRate,
+                new bytes(0)
+            ),
+            newCtx
+        );
+    }
+
+    function beforeAgreementTerminated(
+        ISuperToken superToken,
+        bytes calldata /* ctx */,
+        address agreementClass,
+        bytes32 /* agreementId */
+    )
+        external view override
+        onlyHost
+        returns (bytes memory /* cbdata */)
+    {
+        // no idea what should  go here
+        if (_isSameToken(superToken) && _isCFAv1(agreementClass)) return new bytes(1);
+        return new bytes(0);
+    }
+
+
+    function afterAgreementTerminated(
         ISuperToken /* superToken */,
         bytes calldata ctx,
         address agreementClass,
@@ -141,52 +196,22 @@ contract SubscriptionV0 is ISuperApp, Ownable {
         onlyHost
         returns (bytes memory newCtx)
     {
-        // update stream to the sender
-        (address sender, int96 flowRate) = _getFlowInfo(ctx, agreementClass, agreementId);
+        (address receiver,) = _getFlowInfo(ctx, agreementClass, agreementId);
 
+        // terminate our stream to the sender
         newCtx = ctx;
 
-        _host.callAgreement(
+        (newCtx,) = _host.callAgreementWithContext(
             _cfa,
             abi.encodeWithSelector(
-                _cfa.updateFlow.selector,
+                _cfa.deleteFlow.selector,
                 _rewardToken,
-                sender,
-                flowRate / 2,
-                newCtx
-            )
+                address(this),
+                receiver,
+                new bytes(0)
+            ),
+            newCtx
         );
-    }
-
-
-    function beforeAgreementTerminated(
-        ISuperToken superToken,
-        bytes calldata /* ctx */,
-        address agreementClass,
-        bytes32 /* agreementId */
-    )
-        external view override
-        onlyHost
-        returns (bytes memory cbdata)
-    {
-        // don't revert is termination
-        if (!_isSameToken(superToken) || !_isCFAv1(agreementClass)) return abi.encode(true);
-        return abi.encode(false);
-    }
-
-
-    function afterAgreementTerminated(
-        ISuperToken superToken,
-        bytes calldata ctx,
-        address agreementClass,
-        bytes32 agreementId,
-        bytes calldata cbdata
-    )
-        external override
-        onlyHost
-        returns (bytes memory newCtx)
-    {
-        // terminate our stream to the sender
     }
 
     function _isSameToken(ISuperToken superToken) private view returns (bool) {
