@@ -1,1 +1,4 @@
 # Outpost Subscriptions
+
+Subscription Contract: 0x0dA2843bF42d5B102A05916dC413a4E5CC64736E
+Reward Token: 0xB69afb4f73a6561e42B9cF4631782400A12F4ab8
