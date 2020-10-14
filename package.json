@@ -9,8 +9,7 @@
     "build": "truffle compile --all",
     "migrate": "truffle migrate",
     "pretest": "mkdir -p build/contracts;cp node_modules/@superfluid-finance/ethereum-contracts/build/contracts/* build/contracts/",
-    "test": "truffle test",
-    "test:goerli": "yarn test --network goerli"
+    "test": "truffle test"
   },
   "keywords": [
     "truffle",
@@ -28,6 +27,6 @@
     "@truffle/contract": "^4.2.25",
     "@truffle/hdwallet-provider": "^1.1.0",
     "dotenv": "^8.2.0",
-    "truffle": "5.1.46"
+    "truffle": "^5.1.48"
   }
 }
