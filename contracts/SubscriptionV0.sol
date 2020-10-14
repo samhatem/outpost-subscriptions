@@ -52,6 +52,10 @@ contract SubscriptionV0 is ISuperApp, Ownable {
         _host.registerApp(configWord);
     }
 
+    function hasSubscription (address user) public view returns (bool) {
+      return _subscriptionSet.contains(user);
+    }
+
     function rewardToken () public view returns (address) {
       return address(_rewardToken);
     }
@@ -106,6 +110,8 @@ contract SubscriptionV0 is ISuperApp, Ownable {
       (address sender, int96 flowRate) = _getFlowInfo(ctx, agreementClass, agreementId);
       require(flowRate >= _MINIMUM_FLOW_RATE, "SubV0: Flow too low.");
 
+      _subscriptionSet.add(sender);
+
       newCtx = ctx;
 
       (newCtx, ) = _host.callAgreementWithContext(
@@ -137,7 +143,7 @@ contract SubscriptionV0 is ISuperApp, Ownable {
     }
 
     function afterAgreementUpdated(
-        ISuperToken superToken,
+        ISuperToken /* superToken */,
         bytes calldata ctx,
         address agreementClass,
         bytes32 agreementId,
@@ -194,6 +200,8 @@ contract SubscriptionV0 is ISuperApp, Ownable {
         returns (bytes memory newCtx)
     {
         (address receiver,) = _getFlowInfo(ctx, agreementClass, agreementId);
+
+        _subscriptionSet.remove(receiver);
 
         // terminate our stream to the sender
         newCtx = ctx;

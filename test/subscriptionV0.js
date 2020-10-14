@@ -25,7 +25,7 @@ contract('SubscriptionV0', accounts => {
           web3Provider: web3.currentProvider
         })
     } else {
-        sf = new SuperfluidSDK.Framework({ web3Provider: web3.currentProvider });       
+        sf = new SuperfluidSDK.Framework({ web3Provider: web3.currentProvider });
     }
     await sf.initialize()
 
@@ -87,6 +87,11 @@ contract('SubscriptionV0', accounts => {
     assert.equal(rewardFlow.flowRate, MINIMUM_FLOW_RATE, 'reward should flow at minimum flow rate')
   })
 
+  it ('updates subscription set', async () => {
+    const hasSubscription = await subscription.hasSubscription(alice)
+    assert.equal(hasSubscription, true, 'Has subscription should be true after creating flow')
+  })
+
   it ('updates a flow', async () => {
     const updatedFlow = MINIMUM_FLOW_RATE * 2
     await sf.host.callAgreement(sf.agreements.cfa.address,
@@ -126,5 +131,10 @@ contract('SubscriptionV0', accounts => {
 
     assert.equal(rewardFlow.flowRate, 0, 'Reward Flow should be 0 after delete')
     assert.equal(paymentFlow.flowRate, 0, 'Payment flow should be 0 after delete')
+  })
+
+  it ('updates subscription to false after deleting flow', async () => {
+    const hasSubscription = await subscription.hasSubscription(alice)
+    assert.equal(hasSubscription, false, 'should not have subscription after terminating flow')
   })
 })
