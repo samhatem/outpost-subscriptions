@@ -6,8 +6,14 @@ const INFURA_ID = process.env.INFURA_ID
 
 module.exports = {
   networks: {
+    development: {
+      port: 7545,
+      network_id: '*',
+      host: '127.0.0.1'
+    },
+
     goerli: {
-      provider: () => new HDWalletProvider(MNEMONIC, `http://localhost:8545`),
+      provider: () => new HDWalletProvider(MNEMONIC, `https://goerli.infura.io/v3/${INFURA_ID}`),
       network_id: 5,
       confirmations: 2,
       timeoutBlocks: 200,
