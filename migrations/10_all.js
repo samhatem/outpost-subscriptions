@@ -29,21 +29,25 @@ async function setupLocalSuperfluid(deployer) {
   return sf;
 }
 
-async function setupLocalUniswap(deployer, acceptedToken, rewardToken, alice) {
+async function setupUniswap (deployer, acceptedToken, rewardToken, alice) {
   await deployer.deploy(UniswapV2Factory, alice)
   const uniFactory = await UniswapV2Factory.deployed()
 
   await deployer.deploy(UniswapV2Router02, uniFactory.address, uniFactory.address)
   const uniRouter = await UniswapV2Router02.deployed()
 
-  const tx = await uniFactory.createPair(acceptedToken.address, rewardToken.address)
-  const pairAddr = tx.receipt.logs[0].args.pair
-  const pair = await UniswapV2Pair.at(pairAddr)
+  await createUniPair(uniFactory, acceptedToken, rewardToken)
 
   return {
     uniFactory,
     uniRouter
   }
+}
+
+async function createUniPair (uniFactory, acceptedToken, rewardToken) {
+  const tx = await uniFactory.createPair(acceptedToken.address, rewardToken.address)
+  const pairAddr = tx.receipt.logs[0].args.pair
+  const pair = await UniswapV2Pair.at(pairAddr)
 }
 
 module.exports = async function (deployer, _, accounts) {
@@ -98,15 +102,7 @@ module.exports = async function (deployer, _, accounts) {
   const dai = await sf.contracts.TestToken.at(daiAddress);
 
   // MIGRATE UNISWAP
-  let uniRouter
-  if ((await web3.eth.net.getId()) === 5 /* goerli */) {
-    // create pair on goerli
-  } else {
-    uni = await setupLocalUniswap(deployer, rewardToken, dai, alice)
-    uniRouter = uni.uniRouter
-  }
-
-  // MIGRATE THE SUBSCIPTION CONTRACT
+  let { uniRouter } = await setupUniswap(deployer, rewardToken, dai, alice)
 
   const MINT_AMOUNT = web3.utils.toWei("20000000", "ether")
 
