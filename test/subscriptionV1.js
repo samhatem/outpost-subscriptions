@@ -7,6 +7,7 @@ const MINIMUM_FLOW_RATE = 1929012345679
 
 let subscription
 let rewardToken
+let rewardSuperToken
 let acceptedToken
 let alice = '0x5abBF48D100C4A4c3506F56698Edd96Bb166E55a'
 let sf
@@ -34,7 +35,10 @@ describe('SubscriptionV1', accounts => {
     subscription = await SubscriptionV1.deployed()
     rewardAddress = await subscription._rewardERC20.call()
     rewardToken = await TestToken.at(rewardAddress)
-    await dai.mint(alice, web3.utils.toWei("100", "ether"), { from: alice })
+    const rewardWrapper = await sf.getERC20Wrapper(rewardToken)
+    rewardSuperToken = await sf.contracts.ISuperToken.at(rewardWrapper.wrapperAddress)
+
+    await dai.mint(alice, web3.utils.toWei("10000", "ether"), { from: alice })
     const daiBalance = await dai.balanceOf(alice)
   })
 
@@ -82,7 +86,7 @@ describe('SubscriptionV1', accounts => {
   })
 
   it ('updates a flow', async () => {
-    const updatedFlow = MINIMUM_FLOW_RATE * 2
+    const updatedFlow = MINIMUM_FLOW_RATE * 100
     await sf.host.callAgreement(sf.agreements.cfa.address,
       sf.agreements.cfa.contract.methods.updateFlow(
         acceptedToken.address,
@@ -97,6 +101,27 @@ describe('SubscriptionV1', accounts => {
     const paymentFlow = await sf.agreements.cfa.getFlow(acceptedToken.address, alice, subscription.address)
 
     assert.equal(paymentFlow.flowRate, updatedFlow, 'payment should double')
+  })
+
+  it ('distributes the reward', async () => {
+    const idaIndex = 42
+
+    const res = await subscription.distributeReward("0", idaIndex)
+    const args = res.receipt.logs[0].args
+    console.log(args, 'the args from distribute')
+
+    /*
+    await sf.host.callAgreement(
+      sf.agreements.ida.address,
+      sf.agreements.ida.contract.methods.claim(
+        rewardToken.address, subscription.address, idaIndex.toString(), "0x"
+      ).encodeABI(),
+      { from: alice }
+    )
+
+    const rewardAmount = (await rewardSuperToken.balanceOf(alice)).toString()
+    expect(rewardAmount).to.be.above(0)
+    */
   })
 
   it ('terminates a flow', async () => {
@@ -121,9 +146,5 @@ describe('SubscriptionV1', accounts => {
   it ('updates subscription to false after deleting flow', async () => {
     const hasSubscription = await subscription.hasSubscription(alice)
     assert.equal(hasSubscription, false, 'should not have subscription after terminating flow')
-  })
-
-  it ('distributes the reward', async () => {
-    await subscription.distributeReward("0")
   })
 })

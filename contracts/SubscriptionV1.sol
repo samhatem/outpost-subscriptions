@@ -21,11 +21,13 @@ import {
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC777/IERC777Recipient.sol";
+import "@openzeppelin/contracts/introspection/IERC1820Registry.sol";
 
 import "@uniswap/v2-periphery/contracts/interfaces/IERC20.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
-contract SubscriptionV1 is ISuperApp, Ownable {
+contract SubscriptionV1 is ISuperApp, Ownable, IERC777Recipient {
     using SafeMath for uint256;
 
     uint constant MAX_UINT = 2**256 - 1;
@@ -35,7 +37,6 @@ contract SubscriptionV1 is ISuperApp, Ownable {
     ISuperfluid private _host; // host
     IConstantFlowAgreementV1 private _cfa; // the stored constant flow agreement class address
     IInstantDistributionAgreementV1 private _ida;
-    uint32 private _idaIndex = 0;
 
     IERC20 public _acceptedERC20;
     ISuperToken public _acceptedSuperToken; // accepted token
@@ -44,6 +45,11 @@ contract SubscriptionV1 is ISuperApp, Ownable {
     ISuperToken public _rewardSuperToken;
 
     IUniswapV2Router02 _uniswapRouter;
+
+    IERC1820Registry private _erc1820 = IERC1820Registry(0x1820a4B7618BdE71Dce8cdc73aAB6C95905faD24);
+
+    bytes32 constant private _TOKENS_SENDER_INTERFACE_HASH = keccak256("ERC777TokensSender");
+    bytes32 constant private _TOKENS_RECIPIENT_INTERFACE_HASH = keccak256("ERC777TokensRecipient");
 
     // subscription info of subscribers for payouts
     struct SubscriptionInfo {
@@ -58,6 +64,8 @@ contract SubscriptionV1 is ISuperApp, Ownable {
     // set of all subscribers
     EnumerableSet.AddressSet private _subscriptionSet;
     using EnumerableSet for EnumerableSet.AddressSet;
+
+    event Distribution(uint32 index, uint[] amounts);
 
     constructor(
         ISuperfluid host,
@@ -108,6 +116,8 @@ contract SubscriptionV1 is ISuperApp, Ownable {
         _acceptedERC20.approve(address(_uniswapRouter), MAX_UINT);
         // approve rewardSuperToken to spend unlimited reward tokens
         _rewardERC20.approve(address(_rewardSuperToken), MAX_UINT);
+
+        _erc1820.setInterfaceImplementer(address(this), _TOKENS_RECIPIENT_INTERFACE_HASH, address(this));
     }
 
     function hasSubscription (address user) public view returns (bool) {
@@ -128,7 +138,7 @@ contract SubscriptionV1 is ISuperApp, Ownable {
         _minFlowRate = newFlowRate;
     }
 
-    function distributeReward (uint amountOutMin) public {
+    function distributeReward (uint amountOutMin, uint32 idaIndex) public returns (uint32) {
         // downgrade super tokens
         uint256 tokenBalance = acceptedTokenBalance();
         _acceptedSuperToken.downgrade(tokenBalance);
@@ -138,7 +148,7 @@ contract SubscriptionV1 is ISuperApp, Ownable {
         path[0] = address(_acceptedERC20);
         path[1] = address(_rewardERC20);
         // swap tokens on uniswap for amountOutMin
-        _uniswapRouter.swapExactTokensForTokens(
+        uint[] memory amounts = _uniswapRouter.swapExactTokensForTokens(
             tokenBalance,
             amountOutMin,
             path,
@@ -152,40 +162,40 @@ contract SubscriptionV1 is ISuperApp, Ownable {
         _rewardSuperToken.upgrade(rewardBalance);
 
         // create ida and send to all subscribers
-        _idaIndex = _idaIndex + 1;
         _host.callAgreement(
             _ida,
             abi.encodeWithSelector(
                 _ida.createIndex.selector,
                 _rewardSuperToken,
-                _idaIndex,
+                idaIndex,
                 new bytes(0)
             )
         );
 
         uint i = 0;
         while (i < _subscriptionSet.length()) {
-            address user = _subscriptionSet.at(i);
-            SubscriptionInfo memory subInfo = _subInfos[user];
-            _host.callAgreement(
-                _ida,
-                abi.encodeWithSelector(
-                    _ida.updateSubscription.selector,
-                    _rewardSuperToken,
-                    _idaIndex,
-                    user,
-                    _getUnitsOwed(subInfo),
-                    new bytes(0)
-                )
-            );
+          address user = _subscriptionSet.at(i);
+          SubscriptionInfo memory subInfo = _subInfos[user];
 
-            if (subInfo.curFlowRate == 0) {
-                _subscriptionSet.remove(user);
-            } else {
+          _host.callAgreement(
+              _ida,
+              abi.encodeWithSelector(
+                  _ida.updateSubscription.selector,
+                  _rewardSuperToken,
+                  idaIndex,
+                  user,
+                  _getUnitsOwed(subInfo),
+                  new bytes(0)
+              )
+          );
+
+          if (subInfo.curFlowRate == 0) {
+              _subscriptionSet.remove(user);
+          } else {
               i++;
-            }
+          }
 
-            _subInfos[user] = SubscriptionInfo(subInfo.curFlowRate, block.number, 0);
+          _subInfos[user] = SubscriptionInfo(subInfo.curFlowRate, block.number, 0);
         }
 
         _host.callAgreement(
@@ -193,11 +203,13 @@ contract SubscriptionV1 is ISuperApp, Ownable {
             abi.encodeWithSelector(
                 _ida.distribute.selector,
                 _rewardSuperToken,
-                _idaIndex,
+                idaIndex,
                 rewardBalance,
                 new bytes(0)
             )
         );
+
+        emit Distribution(idaIndex, amounts);
     }
 
     function _getFlowInfo(
@@ -357,4 +369,18 @@ contract SubscriptionV1 is ISuperApp, Ownable {
         require(_isCFAv1(agreementClass), "Subscription: only CFAv1 supported");
         _;
     }
+
+
+    // ERC777
+
+    function tokensReceived(
+        address /* operator */,
+        address /* from */,
+        address /* to */,
+        uint256 /* amount */,
+        bytes calldata /* userData */,
+        bytes calldata /* operatorData */
+    )
+        external override
+    {}
 }

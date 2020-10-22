@@ -24,9 +24,13 @@ async function setupLocalSuperfluid(deployer) {
 
   await deployTestToken(errorHandler, [":", "fDAI"]);
   await deploySuperToken(errorHandler, [":", "fDAI"]);
-  await deployer.deploy(TestToken, "JammSession", "JAMM");
+  await deployJAMMToken(deployer)
 
   return sf;
+}
+
+async function deployJAMMToken (deployer) {
+  await deployer.deploy(TestToken, "RewardToken", "RWD");
 }
 
 async function setupUniswap (deployer, acceptedToken, rewardToken, alice) {
@@ -55,13 +59,13 @@ module.exports = async function (deployer, _, accounts) {
 
   let sf;
   if ((await web3.eth.net.getId()) === 5 /* goerli */) {
-      console.log("Using goerli superfluid");
       sf = new SuperfluidSDK.Framework({
         chainId: 5,
         version: process.env.SUPERFLUID_VERSION,
         web3Provider: web3.currentProvider
       })
       await sf.initialize();
+      await deployJAMMToken(deployer)
   } else {
       console.log("Using local superfluid");
       sf = await setupLocalSuperfluid(deployer);
@@ -93,6 +97,9 @@ module.exports = async function (deployer, _, accounts) {
             from: alice
         }
     );
+
+    const wrapper = await sf.getERC20Wrapper(rewardToken)
+    console.log(wrapper, 'THE WRAPPER')
     console.log("Wrapper created.");
   } else {
     console.log("SuperToken wrapper already created.");
@@ -123,6 +130,8 @@ module.exports = async function (deployer, _, accounts) {
     Date.now() + Date.now(),
     { from: alice }
   )
+
+  console.log('\n\n' + sf.agreements.ida.address + 'IDA ADDRESS\n\n')
 
   const sub = await deployer.deploy(
     SubscriptionV1,
