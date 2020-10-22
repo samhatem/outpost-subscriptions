@@ -5,7 +5,7 @@ const SuperfluidSDK = require("@superfluid-finance/ethereum-contracts");
 
 const MINIMUM_FLOW_RATE = 1929012345679
 
-let subscription
+let subContract
 let rewardToken
 let rewardSuperToken
 let acceptedToken
@@ -32,8 +32,8 @@ describe('SubscriptionV1', accounts => {
     const daixWrapper = await sf.getERC20Wrapper(dai);
     acceptedToken = await sf.contracts.ISuperToken.at(daixWrapper.wrapperAddress);
 
-    subscription = await SubscriptionV1.deployed()
-    rewardAddress = await subscription._rewardERC20.call()
+    subContract = await SubscriptionV1.deployed()
+    rewardAddress = await subContract._rewardERC20.call()
     rewardToken = await TestToken.at(rewardAddress)
     const rewardWrapper = await sf.getERC20Wrapper(rewardToken)
     rewardSuperToken = await sf.contracts.ISuperToken.at(rewardWrapper.wrapperAddress)
@@ -65,7 +65,7 @@ describe('SubscriptionV1', accounts => {
         sf.agreements.cfa.contract.methods
           .createFlow(
             acceptedToken.address,
-            subscription.address,
+            subContract.address,
             MINIMUM_FLOW_RATE.toString(),
             "0x"
           )
@@ -75,14 +75,14 @@ describe('SubscriptionV1', accounts => {
 
     await sf.host.batchCall(call, { from: alice })
 
-    const paymentFlow = await sf.agreements.cfa.getFlow(acceptedToken.address, alice, subscription.address)
+    const paymentFlow = await sf.agreements.cfa.getFlow(acceptedToken.address, alice, subContract.address)
 
     assert.equal(paymentFlow.flowRate, MINIMUM_FLOW_RATE, 'payment should flow at minimum flow rate')
   })
 
-  it ('updates subscription set', async () => {
-    const hasSubscription = await subscription.hasSubscription(alice)
-    assert.equal(hasSubscription, true, 'Has subscription should be true after creating flow')
+  it ('updates subContract set', async () => {
+    const hasSubscription = await subContract.hasSubscription(alice)
+    assert.equal(hasSubscription, true, 'Has subContract should be true after creating flow')
   })
 
   it ('updates a flow', async () => {
@@ -90,7 +90,7 @@ describe('SubscriptionV1', accounts => {
     await sf.host.callAgreement(sf.agreements.cfa.address,
       sf.agreements.cfa.contract.methods.updateFlow(
         acceptedToken.address,
-        subscription.address,
+        subContract.address,
         updatedFlow.toString(),
         "0x"
       )
@@ -98,7 +98,7 @@ describe('SubscriptionV1', accounts => {
       { from: alice }
     )
 
-    const paymentFlow = await sf.agreements.cfa.getFlow(acceptedToken.address, alice, subscription.address)
+    const paymentFlow = await sf.agreements.cfa.getFlow(acceptedToken.address, alice, subContract.address)
 
     assert.equal(paymentFlow.flowRate, updatedFlow, 'payment should double')
   })
@@ -106,22 +106,20 @@ describe('SubscriptionV1', accounts => {
   it ('distributes the reward', async () => {
     const idaIndex = 42
 
-    const res = await subscription.distributeReward("0", idaIndex)
+    const res = await subContract.distributeReward("0", idaIndex)
     const args = res.receipt.logs[0].args
     console.log(args, 'the args from distribute')
 
-    /*
     await sf.host.callAgreement(
       sf.agreements.ida.address,
       sf.agreements.ida.contract.methods.claim(
-        rewardToken.address, subscription.address, idaIndex.toString(), "0x"
+        rewardToken.address, subContract.address, idaIndex.toString(), "0x"
       ).encodeABI(),
       { from: alice }
     )
 
     const rewardAmount = (await rewardSuperToken.balanceOf(alice)).toString()
     expect(rewardAmount).to.be.above(0)
-    */
   })
 
   it ('terminates a flow', async () => {
@@ -129,7 +127,7 @@ describe('SubscriptionV1', accounts => {
       sf.agreements.cfa.contract.methods.deleteFlow(
         acceptedToken.address,
         alice,
-        subscription.address,
+        subContract.address,
         "0x"
       )
       .encodeABI(),
@@ -138,13 +136,13 @@ describe('SubscriptionV1', accounts => {
 
     console.log('after terminate flow')
 
-    const paymentFlow = await sf.agreements.cfa.getFlow(acceptedToken.address, alice, subscription.address)
+    const paymentFlow = await sf.agreements.cfa.getFlow(acceptedToken.address, alice, subContract.address)
 
     assert.equal(paymentFlow.flowRate, 0, 'Payment flow should be 0 after delete')
   })
 
-  it ('updates subscription to false after deleting flow', async () => {
-    const hasSubscription = await subscription.hasSubscription(alice)
-    assert.equal(hasSubscription, false, 'should not have subscription after terminating flow')
+  it ('updates subContract to false after deleting flow', async () => {
+    const hasSubscription = await subContract.hasSubscription(alice)
+    assert.equal(hasSubscription, false, 'should not have subContract after terminating flow')
   })
 })
