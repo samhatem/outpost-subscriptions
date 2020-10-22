@@ -1,49 +1,70 @@
 const TestToken = artifacts.require('TestToken');
-const SubscriptionV0 = artifacts.require('SubscriptionV0')
+const SubscriptionV1 = artifacts.require('SubscriptionV1')
 const deployFramework = require("@superfluid-finance/ethereum-contracts/scripts/deploy-framework");
 const deployTestToken = require("@superfluid-finance/ethereum-contracts/scripts/deploy-test-token");
 const deploySuperToken = require("@superfluid-finance/ethereum-contracts/scripts/deploy-super-token");
 const SuperfluidSDK = require("@superfluid-finance/ethereum-contracts");
+const UniswapV2Factory = artifacts.require('UniswapV2Factory');
+const UniswapV2Router02 = artifacts.require('UniswapV2Router02');
+const UniswapV2Pair = artifacts.require('UniswapV2Pair');
 
 const tokenName = 'JammSession';
 
+const MINIMUM_FLOW_RATE = 1929012345679
 
 async function setupLocalSuperfluid(deployer) {
-    global.web3 = web3;
+  global.web3 = web3;
 
-    const errorHandler = err => { if (err) throw err; };
+  const errorHandler = err => { if (err) throw err; };
 
-    await deployFramework(errorHandler);
+  await deployFramework(errorHandler);
 
-    let sf = new SuperfluidSDK.Framework({ web3Provider: web3.currentProvider });
-    await sf.initialize();
+  let sf = new SuperfluidSDK.Framework({ web3Provider: web3.currentProvider });
+  await sf.initialize();
 
-    await deployTestToken(errorHandler, [":", "fDAI"]);
-    await deploySuperToken(errorHandler, [":", "fDAI"]);
-    await deployer.deploy(TestToken, "JammSession", "JAMM");
+  await deployTestToken(errorHandler, [":", "fDAI"]);
+  await deploySuperToken(errorHandler, [":", "fDAI"]);
+  await deployer.deploy(TestToken, "JammSession", "JAMM");
 
-    return sf;
+  return sf;
+}
+
+async function setupLocalUniswap(deployer, acceptedToken, rewardToken, alice) {
+  await deployer.deploy(UniswapV2Factory, alice)
+  const uniFactory = await UniswapV2Factory.deployed()
+
+  await deployer.deploy(UniswapV2Router02, uniFactory.address, uniFactory.address)
+  const uniRouter = await UniswapV2Router02.deployed()
+
+  const tx = await uniFactory.createPair(acceptedToken.address, rewardToken.address)
+  const pairAddr = tx.receipt.logs[0].args.pair
+  const pair = await UniswapV2Pair.at(pairAddr)
+
+  return {
+    uniFactory,
+    uniRouter
+  }
 }
 
 module.exports = async function (deployer, _, accounts) {
   const alice = accounts[0]
 
-    let sf;
-    if ((await web3.eth.net.getId()) === 5 /* goerli */) {
-        console.log("Using goerli superfluid");
-        sf = new SuperfluidSDK.Framework({
-          chainId: 5,
-          version: process.env.SUPERFLUID_VERSION,
-          web3Provider: web3.currentProvider
-        })
-        await sf.initialize();
-    } else {
-        console.log("Using local superfluid");
-        sf = await setupLocalSuperfluid(deployer);
-    }
+  let sf;
+  if ((await web3.eth.net.getId()) === 5 /* goerli */) {
+      console.log("Using goerli superfluid");
+      sf = new SuperfluidSDK.Framework({
+        chainId: 5,
+        version: process.env.SUPERFLUID_VERSION,
+        web3Provider: web3.currentProvider
+      })
+      await sf.initialize();
+  } else {
+      console.log("Using local superfluid");
+      sf = await setupLocalSuperfluid(deployer);
+  }
 
   // MIGRATE THE TEST TOKEN
-  const rewardToken = await TestToken.deployed(tokenName, 'JAMM')
+  const rewardToken = await TestToken.deployed()
 
   console.log(rewardToken.address, 'address of the created token')
 
@@ -73,33 +94,50 @@ module.exports = async function (deployer, _, accounts) {
     console.log("SuperToken wrapper already created.");
   }
 
-  // MIGRATE THE SUBSCIPTION CONTRACT
-
   const daiAddress = await sf.resolver.get("tokens.fDAI");
   const dai = await sf.contracts.TestToken.at(daiAddress);
-  const daixWrapper = await sf.getERC20Wrapper(dai);
-  const daix = await sf.contracts.ISuperToken.at(daixWrapper.wrapperAddress);
 
-  // GET THE REWARD TOKEN WRAPPER
+  // MIGRATE UNISWAP
+  let uniRouter
+  if ((await web3.eth.net.getId()) === 5 /* goerli */) {
+    // create pair on goerli
+  } else {
+    uni = await setupLocalUniswap(deployer, rewardToken, dai, alice)
+    uniRouter = uni.uniRouter
+  }
 
-  superTokenWrapper = await sf.getERC20Wrapper(rewardToken)
-  console.log(superTokenWrapper.wrapperAddress, 'The wrapper address')
-  const tokenx = await sf.contracts.ISuperToken.at(superTokenWrapper.wrapperAddress)
+  // MIGRATE THE SUBSCIPTION CONTRACT
+
+  const MINT_AMOUNT = web3.utils.toWei("20000000", "ether")
+
+  await rewardToken.mint(alice, MINT_AMOUNT, { from: alice })
+  await dai.mint(alice, MINT_AMOUNT, { from: alice })
+
+  await rewardToken.approve(uniRouter.address, MINT_AMOUNT, { from: alice })
+  await dai.approve(uniRouter.address, MINT_AMOUNT, { from: alice })
+
+  await uniRouter.addLiquidity(
+    rewardToken.address,
+    dai.address,
+    web3.utils.toWei("1000", "ether"),
+    web3.utils.toWei("20000", "ether"),
+    web3.utils.toWei("500", "ether"),
+    web3.utils.toWei("10000", "ether"),
+    alice,
+    Date.now() + Date.now(),
+    { from: alice }
+  )
 
   const sub = await deployer.deploy(
-    SubscriptionV0,
+    SubscriptionV1,
     sf.host.address,
     sf.agreements.cfa.address,
-    daix.address,
-    tokenx.address
+    sf.agreements.ida.address,
+    dai.address,
+    rewardToken.address,
+    uniRouter.address,
+    MINIMUM_FLOW_RATE
   )
 
   console.log(`Contract deployed at ${sub.address}`)
-
-  // FUND THE CONTRACT
-
-  await rewardToken.mint(alice, web3.utils.toWei("2000000", "ether"), { from: alice })
-  await rewardToken.approve(tokenx.address, web3.utils.toWei("2000000", "ether"), { from: alice })
-  await tokenx.upgrade(web3.utils.toWei("1000000", "ether"), { from: alice })
-  await tokenx.transfer(sub.address, web3.utils.toWei("1000000", "ether"), { from: alice })
 }

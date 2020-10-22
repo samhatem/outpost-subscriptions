@@ -25,7 +25,7 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IERC20.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
-contract SubscriptionV01 is ISuperApp, Ownable {
+contract SubscriptionV1 is ISuperApp, Ownable {
     using SafeMath for uint256;
 
     uint constant MAX_UINT = 2**256 - 1;
@@ -115,6 +115,11 @@ contract SubscriptionV01 is ISuperApp, Ownable {
         return sub.curFlowRate >= _minFlowRate;
     }
 
+    function subFlow (address user) public view returns (int96) {
+        SubscriptionInfo memory sub = _subInfos[user];
+        return sub.curFlowRate;
+    }
+
     function acceptedTokenBalance () public view returns (uint256) {
         return _acceptedSuperToken.balanceOf(address(this));
     }
@@ -174,13 +179,13 @@ contract SubscriptionV01 is ISuperApp, Ownable {
                 )
             );
 
-            subInfo.unitsOwed = 0;
-
             if (subInfo.curFlowRate == 0) {
                 _subscriptionSet.remove(user);
             } else {
               i++;
             }
+
+            _subInfos[user] = SubscriptionInfo(subInfo.curFlowRate, block.number, 0);
         }
 
         _host.callAgreement(
@@ -258,8 +263,7 @@ contract SubscriptionV01 is ISuperApp, Ownable {
         _subscriptionSet.add(sender);
 
         SubscriptionInfo memory sub = _subInfos[sender];
-        sub.curFlowRate = flowRate;
-        sub.updateBlock = block.number;
+        _subInfos[sender] = SubscriptionInfo(flowRate, block.number, sub.unitsOwed);
 
         newCtx = ctx;
     }
@@ -288,16 +292,14 @@ contract SubscriptionV01 is ISuperApp, Ownable {
         bytes32 agreementId,
         bytes calldata /* cbdata */
     )
-        external view override
+        external override
         returns (bytes memory newCtx)
     {
         (address sender, int96 flowRate) = _getFlowInfo(ctx, agreementClass, agreementId);
         require(flowRate >= _minFlowRate, "SubV0: Flow too low.");
 
         SubscriptionInfo memory sub = _subInfos[sender];
-        sub.unitsOwed = _getUnitsOwed(sub);
-        sub.curFlowRate = flowRate;
-        sub.updateBlock = block.number;
+        _subInfos[sender] = SubscriptionInfo(flowRate, block.number, _getUnitsOwed(sub));
 
         newCtx = ctx;
     }
@@ -326,16 +328,13 @@ contract SubscriptionV01 is ISuperApp, Ownable {
         bytes32 /* agreementId */,
         bytes calldata /* cbdata */
     )
-        external view override
+        external override
         returns (bytes memory newCtx)
     {
         (,,address sender,,) = _host.decodeCtx(ctx);
 
         SubscriptionInfo memory subInfo = _subInfos[sender];
-        subInfo.unitsOwed = _getUnitsOwed(subInfo);
-        subInfo.curFlowRate = 0;
-        subInfo.updateBlock = block.number;
-
+        _subInfos[sender] = SubscriptionInfo(0, block.number, _getUnitsOwed(subInfo));
         newCtx = ctx;
     }
 

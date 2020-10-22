@@ -1,22 +1,19 @@
-const SubscriptionV0 = artifacts.require('SubscriptionV0')
+const SubscriptionV1= artifacts.require('SubscriptionV1')
 const TestToken = artifacts.require('TestToken')
 const { wad4human } = require('@decentral.ee/web3-helpers')
 const SuperfluidSDK = require("@superfluid-finance/ethereum-contracts");
-
 
 const MINIMUM_FLOW_RATE = 1929012345679
 
 let subscription
 let rewardToken
 let acceptedToken
-let alice
+let alice = '0x5abBF48D100C4A4c3506F56698Edd96Bb166E55a'
 let sf
 let dai
 
-
-contract('SubscriptionV0', accounts => {
+describe('SubscriptionV1', accounts => {
   before(async () => {
-
     if ((await web3.eth.net.getId()) === 5 /* goerli */) {
         console.log("Using goerli superfluid");
         sf = new SuperfluidSDK.Framework({
@@ -34,20 +31,14 @@ contract('SubscriptionV0', accounts => {
     const daixWrapper = await sf.getERC20Wrapper(dai);
     acceptedToken = await sf.contracts.ISuperToken.at(daixWrapper.wrapperAddress);
 
-    alice = accounts[0]
-    subscription = await SubscriptionV0.deployed()
-    rewardAddress = await subscription.rewardToken()
+    subscription = await SubscriptionV1.deployed()
+    rewardAddress = await subscription._rewardERC20.call()
     rewardToken = await TestToken.at(rewardAddress)
     await dai.mint(alice, web3.utils.toWei("100", "ether"), { from: alice })
     const daiBalance = await dai.balanceOf(alice)
   })
 
-  it ('should have reward balance of 1000000', async () => {
-    const rewardBalance = await subscription.rewardBalance()
-    assert.equal(rewardBalance.toString() / 1e18, 1000000, 'Initial balance incorrect')
-  })
-
-  it ('creates flow and sends reward token back', async () => {
+  it ('creates flow', async () => {
     // approve unlimited dai
     await dai.approve(
       acceptedToken.address,
@@ -55,7 +46,7 @@ contract('SubscriptionV0', accounts => {
       { from: alice }
     )
 
-    call = [
+    const call = [
       [
         2, // upgrade 100 daix
         acceptedToken.address,
@@ -81,10 +72,8 @@ contract('SubscriptionV0', accounts => {
     await sf.host.batchCall(call, { from: alice })
 
     const paymentFlow = await sf.agreements.cfa.getFlow(acceptedToken.address, alice, subscription.address)
-    const rewardFlow = await sf.agreements.cfa.getFlow(rewardToken.address, subscription.address, alice)
 
     assert.equal(paymentFlow.flowRate, MINIMUM_FLOW_RATE, 'payment should flow at minimum flow rate')
-    assert.equal(rewardFlow.flowRate, MINIMUM_FLOW_RATE, 'reward should flow at minimum flow rate')
   })
 
   it ('updates subscription set', async () => {
@@ -106,10 +95,8 @@ contract('SubscriptionV0', accounts => {
     )
 
     const paymentFlow = await sf.agreements.cfa.getFlow(acceptedToken.address, alice, subscription.address)
-    const rewardFlow = await sf.agreements.cfa.getFlow(rewardToken.address, subscription.address, alice)
 
     assert.equal(paymentFlow.flowRate, updatedFlow, 'payment should double')
-    assert.equal(rewardFlow.flowRate, updatedFlow, 'reward should double')
   })
 
   it ('terminates a flow', async () => {
@@ -127,14 +114,16 @@ contract('SubscriptionV0', accounts => {
     console.log('after terminate flow')
 
     const paymentFlow = await sf.agreements.cfa.getFlow(acceptedToken.address, alice, subscription.address)
-    const rewardFlow = await sf.agreements.cfa.getFlow(rewardToken.address, subscription.address, alice)
 
-    assert.equal(rewardFlow.flowRate, 0, 'Reward Flow should be 0 after delete')
     assert.equal(paymentFlow.flowRate, 0, 'Payment flow should be 0 after delete')
   })
 
   it ('updates subscription to false after deleting flow', async () => {
     const hasSubscription = await subscription.hasSubscription(alice)
     assert.equal(hasSubscription, false, 'should not have subscription after terminating flow')
+  })
+
+  it ('distributes the reward', async () => {
+    await subscription.distributeReward("0")
   })
 })
