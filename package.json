@@ -8,10 +8,8 @@
   "scripts": {
     "build": "truffle compile --all",
     "migrate": "truffle migrate",
-    "pretest": "run-s pretest:create-dir pretest:uni-core pretest:uni-periph pretest:sf",
+    "pretest": "run-s pretest:*",
     "pretest:create-dir": "mkdirp build/contracts",
-    "pretest:uni-core": "cp node_modules/@uniswap/v2-core/build/* build/contracts/",
-    "pretest:uni-periph": "cp node_modules/@uniswap/v2-periphery/build/* build/contracts/",
     "pretest:sf": "cp node_modules/@superfluid-finance/ethereum-contracts/build/contracts/* build/contracts/",
     "test": "truffle test"
   },
@@ -21,8 +19,8 @@
     "ethereum",
     "subscriptions"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "samhatem",
+  "license": "MIT",
   "dependencies": {
     "@decentral.ee/web3-helpers": "^0.3.2",
     "@openzeppelin/contracts": "^3.2.1-solc-0.7",
