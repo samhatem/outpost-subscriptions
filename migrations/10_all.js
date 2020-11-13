@@ -56,7 +56,7 @@ module.exports = async function (deployer, _, accounts) {
     sf.agreements.ida.address,
     dai.address,
     MINIMUM_FLOW_RATE,
-    1
+    0
   )
 
   console.log(`Contract deployed at ${sub.address}`)
