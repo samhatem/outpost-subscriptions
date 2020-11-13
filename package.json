@@ -10,6 +10,7 @@
     "migrate": "truffle migrate",
     "pretest": "run-s pretest:*",
     "pretest:create-dir": "mkdirp build/contracts",
+    "pretest:uni-periph": "cp node_modules/@uniswap/v2-periphery/build/* build/contracts/",
     "pretest:sf": "cp node_modules/@superfluid-finance/ethereum-contracts/build/contracts/* build/contracts/",
     "test": "truffle test",
     "lint": "eslint test migrations"
