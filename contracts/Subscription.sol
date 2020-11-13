@@ -113,15 +113,6 @@ contract Subscription is ISuperApp, Ownable {
         _minFlowRate = newMinFlowRate;
     }
 
-    // register for reward
-    function registerForReward (address user) public returns (bool success) {
-        uint256 balance = _acceptedERC20Token.balanceOf(user);
-        require(balance > 0, "Insufficient balance to register for the reward.");
-
-        _rewardSet.add(user);
-        success = true;
-    }
-
     // should ideally compensate gas cost for caller
     function distributeReward () public {
         // update subscriptions for members of reward set
@@ -150,32 +141,11 @@ contract Subscription is ISuperApp, Ownable {
             }
         }
 
-        // distribute tokens
-        _host.callAgreement(
-            _ida,
-            abi.encodeWithSelector(
-                _ida.distribute.selector,
-                _acceptedSuperToken,
-                _idaIndex,
-                _acceptedSuperToken.balanceOf(address(this)),
-                new bytes(0)
-            )
-        );
-
-        emit Distribution(_idaIndex);
-    }
-
-    function distributeOne (address user) public {
-        _host.callAgreement(
-            _ida,
-            abi.encodeWithSelector(
-                _ida.updateSubscription.selector,
-                _acceptedSuperToken,
-                _idaIndex,
-                user,
-                _acceptedERC20Token.balanceOf(user),
-                new bytes(0)
-            )
+        (uint256 actualAmount,) = _ida.calculateDistribution(
+            _acceptedSuperToken,
+            address(this),
+            _idaIndex,
+            _acceptedSuperToken.balanceOf(address(this))
         );
 
         // distribute tokens
@@ -185,7 +155,7 @@ contract Subscription is ISuperApp, Ownable {
                 _ida.distribute.selector,
                 _acceptedSuperToken,
                 _idaIndex,
-                _acceptedSuperToken.balanceOf(address(this)),
+                actualAmount,
                 new bytes(0)
             )
         );
@@ -204,6 +174,15 @@ contract Subscription is ISuperApp, Ownable {
         (,,sender,,) = _host.decodeCtx(ctx);
 
         (,flowRate,,) = IConstantFlowAgreementV1(agreementClass).getFlowByID(_acceptedSuperToken, agreementId);
+    }
+
+    // register for reward
+    function _registerForReward (address user) private returns (bool success) {
+        uint256 balance = _acceptedERC20Token.balanceOf(user);
+        require(balance > 0, "Insufficient balance to register for the reward.");
+
+        _rewardSet.add(user);
+        success = true;
     }
 
     // SUPER APP CALLBACKS
@@ -231,10 +210,15 @@ contract Subscription is ISuperApp, Ownable {
         external override
         returns (bytes memory newCtx)
     {
-        (address sender, int96 flowRate) = _getFlowInfo(ctx, agreementClass, agreementId);
-        require(flowRate >= _minFlowRate, "Subscription flow too low.");
+        if (_isCFAv1(agreementClass)) {
+            (address sender, int96 flowRate) = _getFlowInfo(ctx, agreementClass, agreementId);
+            require(flowRate >= _minFlowRate, "Subscription flow too low.");
 
-        _subscriptionSet.add(sender);
+            _subscriptionSet.add(sender);
+        } else if (_isIDAv1(agreementClass)) {
+            (,,address subscriber,,) = _host.decodeCtx(ctx);
+            _registerForReward(subscriber);
+        }
 
         newCtx = ctx;
     }
@@ -263,10 +247,15 @@ contract Subscription is ISuperApp, Ownable {
         external override
         returns (bytes memory newCtx)
     {
-        (address sender, int96 flowRate) = _getFlowInfo(ctx, agreementClass, agreementId);
-        require(flowRate >= _minFlowRate, "Subscription flow too low.");
+        if (_isCFAv1(agreementClass)) {
+            (address sender, int96 flowRate) = _getFlowInfo(ctx, agreementClass, agreementId);
+            require(flowRate >= _minFlowRate, "Subscription flow too low.");
 
-        _subscriptionSet.add(sender);
+            _subscriptionSet.add(sender);
+        } else if (_isIDAv1(agreementClass)) {
+            (,,address subscriber,,) = _host.decodeCtx(ctx);
+            _registerForReward(subscriber);
+        }
 
         newCtx = ctx;
     }

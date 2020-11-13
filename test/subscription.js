@@ -48,10 +48,6 @@ contract('Subscription', accounts => {
     assert.equal(hasSubscription, false, 'Should not has a subscription before tests')
   })
 
-  it('allows registering for rewards', async () => {
-    await subContract.registerForReward(bob, { from: bob })
-  })
-
   it('allows approving subscription', async () => {
     const idaIndex = await subContract.idaIndex()
 
@@ -64,13 +60,6 @@ contract('Subscription', accounts => {
         "0x"
       ).encodeABI(),
       { from: bob }
-    )
-  })
-
-  it('does not register account without balance', async () => {
-    await expectRevert(
-      subContract.registerForReward(accounts[2], { from: bob }),
-      'Insufficient balance to register for the reward.'
     )
   })
 
@@ -174,49 +163,17 @@ contract('Subscription', accounts => {
     const prevBalance = await superDai.balanceOf(bob)
     const contractBalance = await superDai.balanceOf(subContract.address)
 
-    const tx = await subContract.distributeOne(bob, { from: alice })
+    console.log(bob, 'BOBS ADDRESS')
+
+    const tx = await subContract.distributeReward({ from: alice })
 
     const distribution = tx.logs.filter(log => log.event === 'Distribution')[0]
 
-    console.log(distribution, 'THE DISTRIBUTION')
-
     const bobBalance = await dai.balanceOf(bob)
-
-    console.log(bobBalance, 'BOBS BALANCE')
-
-    const indexInfoBefore = await sf.agreements.ida.getIndex(
-      superDai.address,
-      subContract.address,
-      distribution.args.index.toNumber()
-    )
-
-    console.log(indexInfoBefore, 'THE INDEX INFO BEFORE')
-
-    await sf.host.callAgreement(
-      sf.agreements.ida.address,
-      sf.agreements.ida.contract.methods.claim(
-        superDai.address,
-        subContract.address,
-        distribution.args.index.toNumber(),
-        '0x'
-      ).encodeABI(),
-      { from: bob }
-    )
-
-    const indexInfoAfter = await sf.agreements.ida.getIndex(
-      superDai.address,
-      subContract.address,
-      distribution.args.index.toNumber()
-    )
-
-    console.log(indexInfoAfter, 'THE INDEX INFO After')
 
     const newBalance = await superDai.balanceOf(bob)
     const newContractBalance = await superDai.balanceOf(subContract.address)
 
-    console.log(newBalance, 'THE NEW BALANCE')
-    console.log(prevBalance, 'THE PREVIOUS BALANCE')
-    console.log(contractBalance, 'THE OLD CONTRACT BALANCE')
-    console.log(newContractBalance, 'THE NEW CONTRACT BALANCE')
+    expect(Number(newBalance)).to.be.above(Number(prevBalance))
   })
 })
