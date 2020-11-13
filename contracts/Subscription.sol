@@ -109,6 +109,10 @@ contract Subscription is ISuperApp, Ownable {
         return _subscriptionSet.contains(user);
     }
 
+    function hasApprovedReward (address user) public view returns (bool) {
+        return _rewardSet.contains(user);
+    }
+
     function setMinFlowRate (int96 newMinFlowRate) external onlyOwner {
         _minFlowRate = newMinFlowRate;
     }

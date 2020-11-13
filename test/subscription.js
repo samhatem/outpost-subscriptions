@@ -17,6 +17,7 @@ let bob
 
 contract('Subscription', accounts => {
   before(async () => {
+    console.log(accounts, 'THE ACCOUNTS')
     alice = accounts[0]
     bob = accounts[1]
 
