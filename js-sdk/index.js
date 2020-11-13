@@ -8,7 +8,7 @@ const RESOLVER_ADDRESS = '0x3710AB3fDE2B61736B8BB0CE845D6c61F667a78E'
 function Framework (web3Provider) {
   this.version = SF_VERSION
 
-  this.resolver = new ethers.Contract(RESOLVER_ADDRESS, SfABI.IResolver, web3Provider)
+  this.resolver = new ethers.Contract(RESOLVER_ADDRESS, SfABI.IResolver, web3Provider.getSigner())
 
   this.provider = web3Provider
 }
@@ -17,14 +17,14 @@ Framework.prototype.init = async function () {
   const superfluidAddress = await this.resolver.get(`Superfluid.${this.version}`)
   const cfaAddress = await this.resolver.get(`ConstantFlowAgreementV1.${this.version}`)
   const idaAddress = await this.resolver.get(`InstantDistributionAgreementV1.${this.version}`)
-  console.debug('Superfluid', superfluidAddress)
-  console.debug('ConstantFlowAgreementV1', cfaAddress)
-  console.debug('InstantDistributionAgreementV1', idaAddress)
+  console.log('Superfluid', superfluidAddress)
+  console.log('ConstantFlowAgreementV1', cfaAddress)
+  console.log('InstantDistributionAgreementV1', idaAddress)
 
-  this.host = new ethers.Contract(superfluidAddress, SfABI.ISuperfluid, this.provider)
+  this.host = new ethers.Contract(superfluidAddress, SfABI.ISuperfluid, this.provider.getSigner())
   this.agreements = {
-    cfa: new ethers.Contract(cfaAddress, SfABI.IConstantFlowAgreementV1, this.provider),
-    ida: new ethers.Contract(idaAddress, SfABI.IInstantDistributionAgreementV1, this.provider)
+    cfa: new ethers.Contract(cfaAddress, SfABI.IConstantFlowAgreementV1, this.provider.getSigner()),
+    ida: new ethers.Contract(idaAddress, SfABI.IInstantDistributionAgreementV1, this.provider.getSigner())
   }
 }
 
