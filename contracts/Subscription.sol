@@ -29,9 +29,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract Subscription is ISuperApp, Ownable {
     using SafeMath for uint256;
 
-    uint256 private _minRewardBalance;
     int96 private _minFlowRate;
-    uint32 private _curIdaIndex;
+    uint32 private _idaIndex;
 
     ISuperfluid private _host;
     IConstantFlowAgreementV1 private _cfa;
@@ -52,7 +51,7 @@ contract Subscription is ISuperApp, Ownable {
         IInstantDistributionAgreementV1 ida,
         ERC20WithTokenInfo acceptedToken,
         int96 minFlowRate,
-        uint256 minRewardBalance
+        uint32 idaIndex
     ) {
         assert(address(host) != address(0));
         assert(address(cfa) != address(0));
@@ -76,9 +75,22 @@ contract Subscription is ISuperApp, Ownable {
         );
         _acceptedSuperToken = ISuperToken(acceptedWrapper);
 
-        _curIdaIndex = 0;
+        _idaIndex = idaIndex;
         _minFlowRate = minFlowRate;
-        _minRewardBalance = minRewardBalance;
+
+        _host.callAgreement(
+            _ida,
+            abi.encodeWithSelector(
+                _ida.createIndex.selector,
+                _acceptedSuperToken,
+                _idaIndex,
+                new bytes(0)
+            )
+        );
+    }
+
+    function idaIndex () public view returns (uint32) {
+        return _idaIndex;
     }
 
     function minFlowRate () public view returns (int96) {
@@ -101,63 +113,42 @@ contract Subscription is ISuperApp, Ownable {
         _minFlowRate = newMinFlowRate;
     }
 
-    function setminRewardBalance (uint256 minRewardBalance) external onlyOwner {
-        _minRewardBalance = minRewardBalance;
-    }
-
     // register for reward
-    function registerForReward (address user) public {
-        (bool hasSufficientBalance,) = _checkRewardBalance(user);
-        require(hasSufficientBalance, "insufficient balance to register for the reward.");
+    function registerForReward (address user) public returns (bool success) {
+        uint256 balance = _acceptedERC20Token.balanceOf(user);
+        require(balance > 0, "Insufficient balance to register for the reward.");
 
         _rewardSet.add(user);
+        success = true;
     }
 
     // should ideally compensate gas cost for caller
-    function distributeReward () public returns (uint32 indexDistributed) {
-        uint256 rewardHoldersTotalBalance;
-
-        // get total tokens held by reward set and remove addresses with insufficient balance
+    function distributeReward () public {
+        // update subscriptions for members of reward set
         uint256 i = 0;
         while (i < _rewardSet.length()) {
             address user = _rewardSet.at(i);
 
-            (bool hasSufficientBalance, uint256 balance) = _checkRewardBalance(user);
-            if (hasSufficientBalance) {
-                rewardHoldersTotalBalance += balance;
-                i++;
-            } else {
-                _rewardSet.remove(user);
-            }
-        }
-
-        // create the ida index
-        _host.callAgreement(
-            _ida,
-            abi.encodeWithSelector(
-                _ida.createIndex.selector,
-                _acceptedSuperToken,
-                _curIdaIndex,
-                new bytes(0)
-            )
-        );
-
-        for (uint256 j = 0; j < _rewardSet.length(); j++) {
-            address user = _rewardSet.at(j);
+            uint256 balance = _acceptedERC20Token.balanceOf(user);
 
             _host.callAgreement(
                 _ida,
                 abi.encodeWithSelector(
                     _ida.updateSubscription.selector,
                     _acceptedSuperToken,
-                    _curIdaIndex,
+                    _idaIndex,
                     user,
-                    _acceptedERC20Token.balanceOf(user),
+                    balance,
                     new bytes(0)
                 )
             );
-        }
 
+            if (balance > 0) {
+                i++;
+            } else {
+                _rewardSet.remove(user);
+            }
+        }
 
         // distribute tokens
         _host.callAgreement(
@@ -165,25 +156,41 @@ contract Subscription is ISuperApp, Ownable {
             abi.encodeWithSelector(
                 _ida.distribute.selector,
                 _acceptedSuperToken,
-                _curIdaIndex,
+                _idaIndex,
                 _acceptedSuperToken.balanceOf(address(this)),
                 new bytes(0)
             )
         );
 
-        indexDistributed = _curIdaIndex++;
-
-        emit Distribution(indexDistributed);
+        emit Distribution(_idaIndex);
     }
 
-    function _checkRewardBalance (
-        address user
-    )
-        private view
-        returns (bool hasSufficientBalance, uint256 balance)
-    {
-        balance = _acceptedERC20Token.balanceOf(user);
-        hasSufficientBalance = balance >= _minRewardBalance;
+    function distributeOne (address user) public {
+        _host.callAgreement(
+            _ida,
+            abi.encodeWithSelector(
+                _ida.updateSubscription.selector,
+                _acceptedSuperToken,
+                _idaIndex,
+                user,
+                _acceptedERC20Token.balanceOf(user),
+                new bytes(0)
+            )
+        );
+
+        // distribute tokens
+        _host.callAgreement(
+            _ida,
+            abi.encodeWithSelector(
+                _ida.distribute.selector,
+                _acceptedSuperToken,
+                _idaIndex,
+                _acceptedSuperToken.balanceOf(address(this)),
+                new bytes(0)
+            )
+        );
+
+        emit Distribution(_idaIndex);
     }
 
     function _getFlowInfo(
@@ -211,8 +218,7 @@ contract Subscription is ISuperApp, Ownable {
         onlyExpected(superToken, agreementClass)
         returns (bytes memory)
     {
-        require(superToken == _acceptedSuperToken, "Unsupported token");
-        require(agreementClass == address(_cfa), "Unsupported agreement");
+        require(superToken == _acceptedSuperToken, "UnsupportedToken");
     }
 
     function afterAgreementCreated(
@@ -244,8 +250,7 @@ contract Subscription is ISuperApp, Ownable {
         onlyExpected(superToken, agreementClass)
         returns (bytes memory /* data */)
     {
-        require(superToken == _acceptedSuperToken, "Unsupported token");
-        require(agreementClass == address(_cfa), "Unsupported agreement");
+        require(superToken == _acceptedSuperToken, "UnsupportedToken");
     }
 
     function afterAgreementUpdated(
@@ -277,7 +282,7 @@ contract Subscription is ISuperApp, Ownable {
         returns (bytes memory /* cbdata */)
     {
         // no idea what should  go here
-        if (_isSameToken(superToken) && _isCFAv1(agreementClass)) return new bytes(1);
+        if (_isSameToken(superToken) && (_isCFAv1(agreementClass) || _isIDAv1(agreementClass))) return new bytes(1);
         return new bytes(0);
     }
 
@@ -306,6 +311,10 @@ contract Subscription is ISuperApp, Ownable {
             == keccak256("org.superfluid-finance.agreements.ConstantFlowAgreement.v1");
     }
 
+    function _isIDAv1(address agreementClass) private view returns (bool) {
+        return agreementClass == address(_ida);
+    }
+
     modifier onlyHost() {
         require(msg.sender == address(_host), "Subscription: support only one host");
         _;
@@ -313,7 +322,9 @@ contract Subscription is ISuperApp, Ownable {
 
     modifier onlyExpected(ISuperToken superToken, address agreementClass) {
         require(_isSameToken(superToken), "Subscription: not accepted token");
-        require(_isCFAv1(agreementClass), "Subscription: only CFAv1 supported");
+        require(_isCFAv1(agreementClass) || _isIDAv1(agreementClass),
+            "Subscription: only CFAv1 or IDAv1 supported"
+        );
         _;
     }
 }
