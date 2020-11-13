@@ -1,6 +1,6 @@
 {
   "name": "outpost-subscriptions",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "decentralized subscription protocol",
   "main": "js-sdk/index.js",
   "directories": {
